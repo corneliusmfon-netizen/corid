@@ -23,7 +23,7 @@ The platform offers both **Brand New** and **Grade A Preowned** collections, mak
 - **Responsive Design** — Mobile-first with smooth navigation and interactions
 - **Cursor Glow Effect** — Premium interactive visual touch
 
-### Admin Dashboard (`admin/index.html`)
+### Admin Dashboard (`corid-dashboard-2026.html`)
 - **Dashboard** — Sales stats, weekly charts, top categories, recent orders table
 - **Inventory Management** — Product grid with CRUD operations, search & filter
 - **Orders Management** — Order tracking with status filtering
@@ -58,8 +58,8 @@ corid/
 ├── corid-dashboard-2026.html  # Admin management portal
 ├── package.json               # Dependencies (Supabase JS client)
 ├── vercel.json                # Vercel deployment configuration
-├── fix_db.sql                 # Database fix scripts
 ├── schema.sql                 # Database schema
+├── fix_db.sql                 # Database fix scripts
 ├── .gitignore
 ├── .vercelignore
 │
