@@ -460,6 +460,8 @@ body {
 .status-badge.processing { background: rgba(52,152,219,0.15); color: #2980b9; }
 .status-badge.completed { background: rgba(39,174,96,0.15); color: #27ae60; }
 .status-badge.cancelled { background: rgba(231,76,60,0.15); color: #e74c3c; }
+.status-badge.local { background: rgba(52,73,94,0.15); color: #2c3e50; }
+.status-badge.synced { background: rgba(39,174,96,0.15); color: #27ae60; }
 
 .status-badge .dot {
   width: 6px;
@@ -471,6 +473,8 @@ body {
 .status-badge.processing .dot { background: #2980b9; }
 .status-badge.completed .dot { background: #27ae60; }
 .status-badge.cancelled .dot { background: #e74c3c; }
+.status-badge.local .dot { background: #2c3e50; }
+.status-badge.synced .dot { background: #27ae60; }
 
 .action-btn {
   width: 32px;
