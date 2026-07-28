@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 
 # Initialize FastAPI
 app = FastAPI(title="Corid Lifestyle API", version="1.0.0")
@@ -61,6 +61,33 @@ async def get_products(category: str = "all"):
     except Exception as e:
         return {"error": str(e), "data": None}
 
+@app.post("/api/products")
+async def create_product(product: Dict[str, Any]):
+    """Create a brand new product"""
+    try:
+        response = supabase.table("products").insert(product).execute()
+        return {"message": "Product created successfully", "data": response.data}
+    except Exception as e:
+        return {"error": str(e), "data": None}
+
+@app.put("/api/products/{product_id}")
+async def update_product(product_id: int, product: Dict[str, Any]):
+    """Update a brand new product"""
+    try:
+        response = supabase.table("products").update(product).eq("id", product_id).execute()
+        return {"message": "Product updated successfully", "data": response.data}
+    except Exception as e:
+        return {"error": str(e), "data": None}
+
+@app.delete("/api/products/{product_id}")
+async def delete_product(product_id: int):
+    """Delete a brand new product"""
+    try:
+        response = supabase.table("products").delete().eq("id", product_id).execute()
+        return {"message": "Product deleted successfully", "data": response.data}
+    except Exception as e:
+        return {"error": str(e), "data": None}
+
 @app.get("/api/preowned")
 async def get_preowned(category: str = "all"):
     """Fetch preowned products"""
@@ -71,6 +98,33 @@ async def get_preowned(category: str = "all"):
             
         response = query.execute()
         return {"data": response.data, "error": None}
+    except Exception as e:
+        return {"error": str(e), "data": None}
+
+@app.post("/api/preowned")
+async def create_preowned(product: Dict[str, Any]):
+    """Create a preowned product"""
+    try:
+        response = supabase.table("preowned_products").insert(product).execute()
+        return {"message": "Preowned product created successfully", "data": response.data}
+    except Exception as e:
+        return {"error": str(e), "data": None}
+
+@app.put("/api/preowned/{product_id}")
+async def update_preowned(product_id: int, product: Dict[str, Any]):
+    """Update a preowned product"""
+    try:
+        response = supabase.table("preowned_products").update(product).eq("id", product_id).execute()
+        return {"message": "Preowned product updated successfully", "data": response.data}
+    except Exception as e:
+        return {"error": str(e), "data": None}
+
+@app.delete("/api/preowned/{product_id}")
+async def delete_preowned(product_id: int):
+    """Delete a preowned product"""
+    try:
+        response = supabase.table("preowned_products").delete().eq("id", product_id).execute()
+        return {"message": "Preowned product deleted successfully", "data": response.data}
     except Exception as e:
         return {"error": str(e), "data": None}
 
