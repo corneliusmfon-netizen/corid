@@ -4,3 +4,5 @@ schema.sql
 package.json
 package-lock.json
 .gitignore
+.env
+.env.local

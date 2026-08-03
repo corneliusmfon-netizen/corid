@@ -1,24 +1,70 @@
 -- ============================================
--- CORID LIFESTYLE NG - Fix RLS & Add Products
+-- CORID LIFESTYLE NG - Secure RLS Migration + Extra Seed Products
+-- Run this in the Supabase SQL Editor.
+--
+-- IMPORTANT: This supersedes the earlier fix_db.sql, which opened public
+-- INSERT/UPDATE/DELETE on the catalog tables. Those policies are removed
+-- here and replaced with the safe model from schema.sql:
+--   * Catalog (products, preowned_products): anonymous READ only.
+--   * Orders, inquiries, customers, reviews: SERVICE ROLE only.
+-- All writes are performed by the API using the service role (secret) key.
+--
+-- The script is fully idempotent (safe to re-run).
 -- ============================================
 
--- 1. FIX RLS POLICIES for products table
-DROP POLICY IF EXISTS "Allow service full access products" ON products;
+-- ------------------------------------------------------------
+-- 1. PRODUCTS — remove public writes, keep public read + service role
+-- ------------------------------------------------------------
 DROP POLICY IF EXISTS "Allow public read products" ON products;
-CREATE POLICY "Allow public read products" ON products FOR SELECT USING (true);
-CREATE POLICY "Allow public insert products" ON products FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update products" ON products FOR UPDATE USING (true);
-CREATE POLICY "Allow public delete products" ON products FOR DELETE USING (true);
+DROP POLICY IF EXISTS "Allow public insert products" ON products;
+DROP POLICY IF EXISTS "Allow public update products" ON products;
+DROP POLICY IF EXISTS "Allow public delete products" ON products;
+DROP POLICY IF EXISTS "Allow anonymous read products" ON products;
+DROP POLICY IF EXISTS "Allow service full access products" ON products;
 
--- 2. FIX RLS POLICIES for preowned_products table
-DROP POLICY IF EXISTS "Allow service full access preowned" ON preowned_products;
+CREATE POLICY "Allow anonymous read products" ON products FOR SELECT USING (true);
+CREATE POLICY "Allow service full access products" ON products FOR ALL USING (auth.role() = 'service_role');
+
+-- ------------------------------------------------------------
+-- 2. PREOWNED PRODUCTS — remove public writes, keep public read + service role
+-- ------------------------------------------------------------
 DROP POLICY IF EXISTS "Allow public read preowned" ON preowned_products;
-CREATE POLICY "Allow public read preowned" ON preowned_products FOR SELECT USING (true);
-CREATE POLICY "Allow public insert preowned" ON preowned_products FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update preowned" ON preowned_products FOR UPDATE USING (true);
-CREATE POLICY "Allow public delete preowned" ON preowned_products FOR DELETE USING (true);
+DROP POLICY IF EXISTS "Allow public insert preowned" ON preowned_products;
+DROP POLICY IF EXISTS "Allow public update preowned" ON preowned_products;
+DROP POLICY IF EXISTS "Allow public delete preowned" ON preowned_products;
+DROP POLICY IF EXISTS "Allow anonymous read preowned" ON preowned_products;
+DROP POLICY IF EXISTS "Allow service full access preowned" ON preowned_products;
 
--- 3. ADD MORE BRAND NEW PRODUCTS WITH IMAGES
+CREATE POLICY "Allow anonymous read preowned" ON preowned_products FOR SELECT USING (true);
+CREATE POLICY "Allow service full access preowned" ON preowned_products FOR ALL USING (auth.role() = 'service_role');
+
+-- ------------------------------------------------------------
+-- 3. ORDERS / INQUIRIES / CUSTOMERS / REVIEWS — SERVICE ROLE ONLY
+--    (removes anonymous read/insert policies that exposed personal data)
+-- ------------------------------------------------------------
+DROP POLICY IF EXISTS "Allow anonymous insert orders" ON orders;
+DROP POLICY IF EXISTS "Allow anonymous read own orders" ON orders;
+DROP POLICY IF EXISTS "Allow service full access orders" ON orders;
+CREATE POLICY "Allow service full access orders" ON orders FOR ALL USING (auth.role() = 'service_role');
+
+DROP POLICY IF EXISTS "Allow anonymous insert inquiries" ON inquiries;
+DROP POLICY IF EXISTS "Allow anonymous read own inquiries" ON inquiries;
+DROP POLICY IF EXISTS "Allow service full access inquiries" ON inquiries;
+CREATE POLICY "Allow service full access inquiries" ON inquiries FOR ALL USING (auth.role() = 'service_role');
+
+DROP POLICY IF EXISTS "Allow anonymous insert customers" ON customers;
+DROP POLICY IF EXISTS "Allow anonymous read customers" ON customers;
+DROP POLICY IF EXISTS "Allow service full access customers" ON customers;
+CREATE POLICY "Allow service full access customers" ON customers FOR ALL USING (auth.role() = 'service_role');
+
+DROP POLICY IF EXISTS "Allow anonymous insert reviews" ON reviews;
+DROP POLICY IF EXISTS "Allow anonymous read approved reviews" ON reviews;
+DROP POLICY IF EXISTS "Allow service full access reviews" ON reviews;
+CREATE POLICY "Allow service full access reviews" ON reviews FOR ALL USING (auth.role() = 'service_role');
+
+-- ------------------------------------------------------------
+-- 4. ADD MORE BRAND NEW PRODUCTS WITH IMAGES (idempotent)
+-- ------------------------------------------------------------
 INSERT INTO products (id, name, category, price, image, badge, rating, rating_count, description, sizes, details)
 VALUES
 -- Corporate shirts (more variety)
@@ -65,9 +111,12 @@ VALUES
 (34, 'Travel Duffle Bag', 'bags', '₦30,000', 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600&h=600&fit=crop', 'Travel', 4.5, 34, 'Spacious duffle bag for weekend getaways.', ARRAY['One Size'], ARRAY['Water-resistant nylon', 'Removable shoulder strap', 'Shoe compartment', 'Interior pockets', 'Lockable zippers']),
 
 -- Unisex items
-(35, 'Classic Tote - Unisex', 'bags', '₦20,000', 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=600&h=600&fit=crop', 'Unisex', 4.4, 67, 'Minimalist tote bag suitable for everyone.', ARRAY['One Size'], ARRAY['Heavy cotton canvas', 'Reinforced handles', 'Interior pocket', 'Folds flat', 'Available in 3 colors']);
+(35, 'Classic Tote - Unisex', 'bags', '₦20,000', 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=600&h=600&fit=crop', 'Unisex', 4.4, 67, 'Minimalist tote bag suitable for everyone.', ARRAY['One Size'], ARRAY['Heavy cotton canvas', 'Reinforced handles', 'Interior pocket', 'Folds flat', 'Available in 3 colors'])
+ON CONFLICT (id) DO NOTHING;
 
--- 4. ADD MORE PREOWNED PRODUCTS
+-- ------------------------------------------------------------
+-- 5. ADD MORE PREOWNED PRODUCTS (idempotent)
+-- ------------------------------------------------------------
 INSERT INTO preowned_products (id, name, category, price, original_price, image, badge, rating, rating_count, description, sizes, details)
 VALUES
 (102, 'Preowned Gucci Casual Shirt', 'casual', '₦18,000', '₦65,000', 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&h=600&fit=crop', 'Luxury', 4.6, 28, 'Authentic Gucci casual shirt in premium condition.', ARRAY['M','L','XL'], ARRAY['Authentic Gucci', 'Grade A condition', 'Signature print', 'Pearl buttons', 'Save 72%']),
@@ -75,4 +124,5 @@ VALUES
 (105, 'Preowned Ralph Lauren Hoodie', 'hoodies', '₦12,000', '₦40,000', 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=600&h=600&fit=crop', 'Grade A', 4.8, 47, 'Authentic Ralph Lauren hoodie with embroidered logo.', ARRAY['M','L','XL'], ARRAY['Authentic Ralph Lauren', 'Embroidered pony logo', 'Cotton fleece', 'Excellent condition', 'Save 70%']),
 (106, 'Preowned Tommy Hilfiger Hoodie', 'hoodies', '₦10,000', '₦35,000', 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=600&h=600&fit=crop', 'Best Value', 4.6, 38, 'Authentic Tommy Hilfiger hoodie in great shape.', ARRAY['S','M','L','XL'], ARRAY['Authentic Tommy Hilfiger', 'Flag logo embroidery', 'Cotton-poly blend', 'Pulled condition 8/10', 'Save 71%']),
 (108, 'Preowned Ray-Ban Sunglasses', 'accessories', '₦15,000', '₦55,000', 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=600&h=600&fit=crop', 'Luxury', 4.6, 31, 'Authentic Ray-Ban aviators in great condition.', ARRAY['One Size'], ARRAY['Authentic Ray-Ban', 'Green G-15 lenses', 'Gold frame', 'Minimal scratches', 'Includes case']),
-(110, 'Preowned Lacoste Polo', 'casual', '₦8,000', '₦30,000', 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&h=600&fit=crop', 'Grade A', 4.7, 56, 'Classic Lacoste polo shirt in excellent preowned condition.', ARRAY['S','M','L','XL'], ARRAY['Authentic Lacoste', 'Embroidered crocodile', 'Cotton pique', 'Collar intact', 'Save 73%']);
+(110, 'Preowned Lacoste Polo', 'casual', '₦8,000', '₦30,000', 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&h=600&fit=crop', 'Grade A', 4.7, 56, 'Classic Lacoste polo shirt in excellent preowned condition.', ARRAY['S','M','L','XL'], ARRAY['Authentic Lacoste', 'Embroidered crocodile', 'Cotton pique', 'Collar intact', 'Save 73%'])
+ON CONFLICT (id) DO NOTHING;

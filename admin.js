@@ -13,6 +13,90 @@ let adminInquiriesData = [];
 let dataSource = 'loading'; // 'supabase' | 'local' | 'fallback'
 
 // ============================================
+// ADMIN AUTHENTICATION
+// ============================================
+const SESSION_KEY = 'corid_admin_token';
+
+function showLoginOverlay() {
+  const overlay = document.getElementById('adminLoginOverlay');
+  if (!overlay) return;
+  overlay.classList.add('active');
+  const input = document.getElementById('adminLoginPassword');
+  if (input) setTimeout(() => input.focus(), 100);
+}
+
+function hideLoginOverlay() {
+  const overlay = document.getElementById('adminLoginOverlay');
+  if (overlay) overlay.classList.remove('active');
+  const input = document.getElementById('adminLoginPassword');
+  if (input) { input.value = ''; input.disabled = false; }
+  const btn = document.getElementById('adminLoginBtn');
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-lock-open"></i> Sign In'; }
+  const err = document.getElementById('adminLoginError');
+  if (err) err.style.display = 'none';
+  const warn = document.getElementById('adminKeyWarning');
+  if (warn) warn.style.display = 'none';
+}
+
+function logoutAdmin() {
+  clearAdminToken();
+  sessionStorage.removeItem(SESSION_KEY);
+  useFallbackData();
+  renderAll();
+  showLoginOverlay();
+}
+
+async function handleAdminLogin(e) {
+  e.preventDefault();
+  const input = document.getElementById('adminLoginPassword');
+  const errorEl = document.getElementById('adminLoginError');
+  const btn = document.getElementById('adminLoginBtn');
+  const password = (input && input.value) || '';
+
+  if (!password) {
+    if (errorEl) { errorEl.textContent = 'Please enter the admin password.'; errorEl.style.display = 'block'; }
+    if (input) input.focus();
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...'; }
+  if (errorEl) errorEl.style.display = 'none';
+
+  const { data, error, status } = await AuthAPI.login(password);
+
+  if (error || !data || !data.token) {
+    if (errorEl) {
+      errorEl.textContent = status === 503
+        ? 'Admin login is not configured. Set the ADMIN_PASSWORD environment variable.'
+        : (error || 'Login failed. Please try again.');
+      errorEl.style.display = 'block';
+    }
+    if (input) input.disabled = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-lock-open"></i> Sign In'; }
+    if (input) input.focus();
+    return;
+  }
+
+  setAdminToken(data.token);
+  sessionStorage.setItem(SESSION_KEY, data.token);
+
+  // Warn if the API is running with a browser-grade (publishable/anon) key
+  const warn = document.getElementById('adminKeyWarning');
+  if (warn) {
+    const kind = data.keyKind || 'unknown';
+    if (kind !== 'secret' && kind !== 'service_role') {
+      warn.querySelector('span').textContent = `The API is using a "${kind}" Supabase key. Set SUPABASE_KEY to your service role (secret) key for full admin access to orders and catalog edits.`;
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+
+  hideLoginOverlay();
+  loadAdminData();
+}
+
+// ============================================
 // DOM REFS
 // ============================================
 const $admin = (sel) => document.querySelector(sel);
@@ -294,6 +378,15 @@ async function loadAdminData() {
       ProductsAPI.getAll(), PreownedAPI.getAll(), OrdersAPI.getAll(),
       CustomersAPI.getAll(), ReviewsAPI.getAll(), InquiriesAPI.getAll()
     ]);
+
+    // If any protected endpoint rejected the session, force a fresh login
+    const results = [prodRes, preRes, ordRes, custRes, revRes, inqRes];
+    if (results.some(r => r && r.status === 401)) {
+      clearAdminToken();
+      sessionStorage.removeItem(SESSION_KEY);
+      showLoginOverlay();
+      return;
+    }
 
     dataSource = 'supabase';
 
@@ -675,8 +768,18 @@ document.addEventListener('DOMContentLoaded', () => {
     `).join('');
   }
 
-  // Load data
-  loadAdminData();
+  // Auth
+  $admin('#adminLoginForm')?.addEventListener('submit', handleAdminLogin);
+  $admin('#adminLogoutBtn')?.addEventListener('click', logoutAdmin);
+
+  // Load data (only after authentication)
+  const savedToken = sessionStorage.getItem(SESSION_KEY);
+  if (savedToken) {
+    setAdminToken(savedToken);
+    loadAdminData();
+  } else {
+    showLoginOverlay();
+  }
   console.log('📊 Corid Admin — Loading from Supabase...');
 
   // Add shimmer animation if not already defined

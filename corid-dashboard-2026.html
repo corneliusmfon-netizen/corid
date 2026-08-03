@@ -15,6 +15,31 @@
 <body>
 
   <!-- ==========================================
+       ADMIN LOGIN OVERLAY
+       ========================================== -->
+  <div class="admin-login-overlay" id="adminLoginOverlay">
+    <div class="admin-login-card">
+      <div class="admin-login-logo">Corid Lifestyle NG</div>
+      <div class="admin-login-sub">Admin Portal · Restricted Access</div>
+      <form id="adminLoginForm" autocomplete="off">
+        <div class="admin-login-field">
+          <label for="adminLoginPassword">Admin Password</label>
+          <div class="admin-login-input-wrap">
+            <i class="fas fa-lock"></i>
+            <input type="password" id="adminLoginPassword" placeholder="Enter admin password" required autocomplete="current-password">
+          </div>
+        </div>
+        <div class="admin-login-error" id="adminLoginError"></div>
+        <div class="admin-login-error" id="adminKeyWarning" style="background:#FFF3CD;color:#8a6d1a;"></div>
+        <button type="submit" class="admin-login-btn" id="adminLoginBtn">
+          <i class="fas fa-lock-open"></i> Sign In
+        </button>
+      </form>
+      <a href="index.html" class="admin-login-back"><i class="fas fa-arrow-left"></i> Back to store</a>
+    </div>
+  </div>
+
+  <!-- ==========================================
        SIDEBAR OVERLAY (Mobile)
        ========================================== -->
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -70,6 +95,10 @@
       <button class="sidebar-link" onclick="window.location.href='index.html'">
         <span class="icon"><i class="fas fa-arrow-left"></i></span>
         Back to Store
+      </button>
+      <button class="sidebar-link" id="adminLogoutBtn">
+        <span class="icon"><i class="fas fa-sign-out-alt"></i></span>
+        Log Out
       </button>
     </div>
   </aside>
