@@ -2,6 +2,11 @@ node_modules/
 .npm/
 .env
 .env.local
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
 *.log
 .vercel/
 .DS_Store

@@ -6,7 +6,7 @@
 
 ## ✨ Overview
 
-**Corid Lifestyle NG** is a full-featured e-commerce fashion storefront built with pure HTML, CSS, and JavaScript. It combines a stunning customer-facing shopping experience with a powerful admin dashboard for inventory, orders, and customer management.
+**Corid Lifestyle NG** is a full-featured e-commerce fashion storefront built with pure HTML, CSS, and JavaScript, powered by a **FastAPI backend** and **Supabase (PostgreSQL)**. It combines a stunning customer-facing shopping experience with a password-protected admin dashboard for inventory, orders, inquiries, customers, and reviews.
 
 The platform offers both **Brand New** and **Grade A Preowned** collections, making premium fashion accessible to everyone across Nigeria.
 
@@ -23,7 +23,8 @@ The platform offers both **Brand New** and **Grade A Preowned** collections, mak
 - **Responsive Design** — Mobile-first with smooth navigation and interactions
 - **Cursor Glow Effect** — Premium interactive visual touch
 
-### Admin Dashboard (`corid-dashboard-2026.html`)
+### Admin Dashboard (`/admin` → `corid-dashboard-2026.html`)
+- **Password-protected login** — sign in with the `ADMIN_PASSWORD` environment variable (HMAC session token, 24h expiry)
 - **Dashboard** — Sales stats, weekly charts, top categories, recent orders table
 - **Inventory Management** — Product grid with CRUD operations, search & filter
 - **Orders Management** — Order tracking with status filtering
@@ -33,10 +34,12 @@ The platform offers both **Brand New** and **Grade A Preowned** collections, mak
 - **Settings** — Store information and branding configuration
 
 ### Technical Features
-- **Supabase Integration** — Real-time database for products, orders, and customers
-- **Offline Fallback** — Hardcoded product data when database is unavailable
-- **Responsive & Mobile-First** — Works seamlessly across all devices
-- **Zero Framework Dependencies** — Built with vanilla HTML/CSS/JS
+- **FastAPI Backend** — Single API for catalog reads, order/inquiry submissions, and all admin operations
+- **Admin Authentication** — Password → expiring HMAC bearer token; protected endpoints reject missing/invalid/expired tokens with 401
+- **Rate Limiting** — Best-effort in-memory throttling on login (5/min), orders (10/min), and inquiries (10/min)
+- **Secure RLS** — Catalog tables are anonymous read-only; personal data (orders, inquiries, customers, reviews) is service-role only
+- **Offline Fallback** — Hardcoded product data when the API is unavailable
+- **Zero Framework Dependencies** — Vanilla HTML/CSS/JS frontend
 
 ## 🛠️ Tech Stack
 
@@ -45,7 +48,8 @@ The platform offers both **Brand New** and **Grade A Preowned** collections, mak
 | ![HTML5](https://img.shields.io/badge/-HTML5-E34F26?logo=html5&logoColor=white) | Structure & content |
 | ![CSS3](https://img.shields.io/badge/-CSS3-1572B6?logo=css3&logoColor=white) | Styling & animations |
 | ![JavaScript](https://img.shields.io/badge/-JavaScript-F7DF1E?logo=javascript&logoColor=black) | Interactivity & logic |
-| ![Supabase](https://img.shields.io/badge/-Supabase-3ECF8E?logo=supabase&logoColor=white) | Backend database |
+| ![FastAPI](https://img.shields.io/badge/-FastAPI-009688?logo=fastapi&logoColor=white) | Backend API |
+| ![Supabase](https://img.shields.io/badge/-Supabase-3ECF8E?logo=supabase&logoColor=white) | PostgreSQL database |
 | ![Vercel](https://img.shields.io/badge/-Vercel-000000?logo=vercel&logoColor=white) | Deployment & hosting |
 | ![Google Fonts](https://img.shields.io/badge/-Google%20Fonts-4285F4?logo=google-fonts&logoColor=white) | Typography (Playfair Display, Inter) |
 | ![Font Awesome](https://img.shields.io/badge/-Font%20Awesome-528DD7?logo=font-awesome&logoColor=white) | Icons |
@@ -54,84 +58,108 @@ The platform offers both **Brand New** and **Grade A Preowned** collections, mak
 
 ```
 corid/
-├── index.html                 # Main customer storefront
-├── corid-dashboard-2026.html  # Admin management portal
-├── package.json               # Dependencies (Supabase JS client)
-├── vercel.json                # Vercel deployment configuration
-├── schema.sql                 # Database schema
-├── fix_db.sql                 # Database fix scripts
-├── .gitignore
-├── .vercelignore
-│
+├── index.html                  # Customer storefront
+├── corid-dashboard-2026.html   # Admin dashboard (routed to /admin)
+├── api.js                      # API client (fetch wrapper + auth token)
+├── script.js                   # Storefront logic & interactions
+├── admin.js                    # Admin dashboard logic
 ├── css/
-│   ├── style.css              # Storefront styles
-│   └── admin.css              # Admin dashboard styles
-│
-├── js/
-│   ├── api.js                 # Supabase client & API functions
-│   ├── script.js              # Storefront logic & interactions
-│   └── admin.js               # Admin dashboard logic
-│
-└── assets/                    # (optional - for local assets)
+│   ├── style.css               # Storefront styles
+│   └── admin.css               # Admin dashboard styles
+├── api/
+│   ├── index.py                # FastAPI backend (Vercel Python function)
+│   ├── schema.sql              # Full schema + seed data (run in Supabase)
+│   └── fix_db.sql              # RLS migration + extra seed data (idempotent)
+├── requirements.txt            # Python dependencies
+├── vercel.json                 # Vercel routing (static files + /api)
+├── .env.example                # Environment variable template
+├── .gitignore / .vercelignore
+└── package.json                # (Supabase JS client — kept for reference)
 ```
+
+## 🔐 Security Model
+
+- The frontend talks **only** to the FastAPI backend — never directly to Supabase
+- The API runs with the **service role (secret)** key from environment variables (never hardcoded, never in the browser)
+- **RLS policies**: `products` / `preowned_products` are anonymous read-only (public catalog); `orders`, `inquiries`, `customers`, `reviews` are service-role only
+- The admin dashboard is gated by `ADMIN_PASSWORD`; sessions use an expiring HMAC bearer token and login is rate-limited
 
 ## 🚦 Getting Started
 
 ### Prerequisites
-- A modern web browser
-- [Supabase](https://supabase.com) account (optional — works with fallback data)
+- Python 3.9+
+- [Supabase](https://supabase.com) project (optional for the offline demo, required for live data)
+- [Vercel CLI](https://vercel.com/docs/cli) (optional, for local dev with the API)
 
-### Local Development
+### 1. Clone & install
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/corneliusmfon-netizen/corid.git
-   cd corid
-   ```
-
-2. **Open in browser**
-   Simply open `index.html` in your browser — no build step required!
-
-3. **(Optional) Connect Supabase**
-   Set up a Supabase project and configure the connection in `js/api.js`:
-   ```js
-   const supabaseUrl = 'YOUR_SUPABASE_URL';
-   const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
-   ```
-
-4. **Open Admin Dashboard**
-   Navigate to `corid-dashboard-2026.html` for the admin panel.
-
-## ☁️ Deployment
-
-This project is configured for one-click deployment on **Vercel**.
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/corneliusmfon-netizen/corid)
-
-The `vercel.json` file handles static site routing automatically:
-```json
-{
-  "version": 2,
-  "builds": [{ "src": "**/*", "use": "@vercel/static" }],
-  "routes": [
-    { "src": "/", "dest": "/index.html" },
-    { "src": "/(.*)", "dest": "/$1" }
-  ]
-}
+```bash
+git clone https://github.com/corneliusmfon-netizen/corid.git
+cd corid
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-## 🧩 Database Schema
+### 2. Configure environment
 
-The Supabase database includes the following tables:
+```bash
+cp .env.example .env
+```
 
-- **`products`** — New products catalog
+Fill in `.env` (never commit it):
+
+| Variable | Value |
+|----------|-------|
+| `SUPABASE_URL` | Your Supabase project URL, e.g. `https://xxxx.supabase.co` |
+| `SUPABASE_KEY` | **Secret (service role)** key — full read/write access for the API |
+| `ADMIN_PASSWORD` | Password used to log in to `/admin` |
+
+### 3. Set up the database (one time)
+
+In the **Supabase SQL Editor**, run in order:
+1. `api/schema.sql` — creates all tables + seed data
+2. `api/fix_db.sql` — tightens RLS policies + adds more seed products (safe to re-run)
+
+### 4. Run locally
+
+```bash
+vercel dev        # recommended: serves static files AND routes /api to the FastAPI backend
+```
+
+Alternatively:
+```bash
+uvicorn api.index:app --reload   # run the API on http://localhost:8000
+```
+
+You can also just open `index.html` in a browser for an **offline demo** — the site falls back to built-in sample data when the API is unreachable.
+
+### 5. Admin dashboard
+
+Visit `/admin` (or open `corid-dashboard-2026.html`) and sign in with your `ADMIN_PASSWORD`.
+
+## ☁️ Deployment (Vercel)
+
+1. Import the repo (or run `vercel` / `vercel --prod`)
+2. Set environment variables in **Project → Settings → Environment Variables** (for Production, Preview, and Development):
+   - `SUPABASE_URL`
+   - `SUPABASE_KEY` (service role / secret)
+   - `ADMIN_PASSWORD`
+3. Deploy. `vercel.json` handles routing automatically:
+   - `/` → `index.html`
+   - `/admin` → `corid-dashboard-2026.html`
+   - `/api/*` → `api/index.py`
+
+> ⚠️ The API **fails to start** if `SUPABASE_URL` or `SUPABASE_KEY` are missing — configure them in Vercel before/with your first deploy.
+
+## 🗄️ Database Tables
+
+- **`products`** — Brand-new products catalog
 - **`preowned_products`** — Preowned products catalog
-- **`orders`** — Customer orders
-- **`order_items`** — Individual items within orders
+- **`orders`** — Customer orders (cart checkouts)
+- **`inquiries`** — Bulk order quote requests
 - **`customers`** — Customer information
-- **`ratings`** — Product ratings & reviews
-- **`ratings_replies`** — Admin replies to reviews
-- **`testimonials`** — Customer testimonials
+- **`reviews`** — Product reviews & feedback (admin moderation)
 
 ## 🤝 Contributing
 

@@ -3,10 +3,12 @@ import hashlib
 import hmac
 import json
 import os
+from collections import defaultdict
+from time import time
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import Client, create_client
@@ -29,18 +31,37 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-# --- Admin authentication (HMAC token derived from ADMIN_PASSWORD) ---
-def _make_admin_token() -> str:
-    """Derive a stable session token from ADMIN_PASSWORD using HMAC-SHA256."""
+# --- Admin authentication (expiring HMAC token derived from ADMIN_PASSWORD) ---
+ADMIN_TOKEN_TTL_SECONDS = 24 * 60 * 60  # sessions last 24h, then re-login required
+
+
+def _make_admin_token(iat: Optional[int] = None) -> str:
+    """Issue a session token: "<issued-at>.<HMAC-SHA256(admin-password, issued-at)>.
+
+    The password is the HMAC key, so tokens can only be minted by someone who
+    knows ADMIN_PASSWORD, and they expire after ADMIN_TOKEN_TTL_SECONDS so a
+    leaked token cannot be used forever.
+    """
     if not ADMIN_PASSWORD:
         return ""
-    return hmac.new(b"corid-admin-session", ADMIN_PASSWORD.encode(), hashlib.sha256).hexdigest()
+    iat = int(iat or time())
+    sig = hmac.new(ADMIN_PASSWORD.encode(), str(iat).encode(), hashlib.sha256).hexdigest()
+    return f"{iat}.{sig}"
 
 
 def _check_admin_token(token: str) -> bool:
     if not ADMIN_PASSWORD or not token:
         return False
-    return hmac.compare_digest(token, _make_admin_token())
+    try:
+        iat_str, sig = token.split(".", 1)
+        iat = int(iat_str)
+    except (ValueError, AttributeError):
+        return False
+    # Reject stale tokens and tokens issued far in the future (clock-skew guard)
+    if iat > time() + 300 or time() - iat > ADMIN_TOKEN_TTL_SECONDS:
+        return False
+    expected = hmac.new(ADMIN_PASSWORD.encode(), str(iat).encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(sig, expected)
 
 
 def require_admin(authorization: Optional[str] = Header(None)):
@@ -72,8 +93,45 @@ def _key_kind(key: str) -> str:
     return "unknown"
 
 
+# --- Simple in-memory rate limiting (best-effort on serverless) ---
+_RATE_LIMITS: Dict[tuple, list] = defaultdict(list)
+
+
+def _client_ip(request: Request) -> str:
+    """Best-effort real client IP: prefer the first X-Forwarded-For hop.
+
+    Behind Vercel's proxy, request.client.host can be a shared edge IP, which
+    would rate-limit every visitor together. The first X-Forwarded-For value
+    is the original caller, so use it when present.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limited(scope: str, limit: int, window_seconds: float, request: Request) -> bool:
+    """Return True if the caller has exceeded `limit` requests in `window_seconds`.
+
+    Keyed by client IP + scope. In-memory only: on Vercel the API runs as
+    serverless instances, so this is best-effort throttling rather than a
+    hard guarantee. It still deters casual abuse and brute-force attempts.
+    """
+    key = (scope, _client_ip(request))
+    now = time()
+    hits = [t for t in _RATE_LIMITS[key] if now - t < window_seconds]
+    _RATE_LIMITS[key] = hits
+    if len(hits) >= limit:
+        return True
+    hits.append(now)
+    # Blunt guard against unbounded growth from many unique IPs
+    if len(_RATE_LIMITS) > 1000:
+        _RATE_LIMITS.clear()
+    return False
+
+
 # --- App + CORS ---
-app = FastAPI(title="Corid Lifestyle API", version="1.1.0")
+app = FastAPI(title="Corid Lifestyle API", version="1.2.0")
 
 # The frontend talks to this API from any origin. No cookies/sessions are used,
 # so credentials stay disabled (making a wildcard origin spec-compliant).
@@ -149,8 +207,10 @@ async def get_preowned(category: str = "all"):
 # --- Public customer submissions ---
 
 @app.post("/api/orders")
-async def create_order(order: Order):
+async def create_order(order: Order, request: Request):
     """Save a new cart order from the storefront (public)."""
+    if _rate_limited("orders", limit=10, window_seconds=60, request=request):
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again in a minute.")
     try:
         response = supabase.table("orders").insert(order.dict()).execute()
         return {"message": "Order created successfully", "data": response.data}
@@ -159,8 +219,10 @@ async def create_order(order: Order):
 
 
 @app.post("/api/inquiries")
-async def create_inquiry(inquiry: Inquiry):
+async def create_inquiry(inquiry: Inquiry, request: Request):
     """Save a bulk order inquiry from the storefront (public)."""
+    if _rate_limited("inquiries", limit=10, window_seconds=60, request=request):
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again in a minute.")
     try:
         response = supabase.table("inquiries").insert(inquiry.dict()).execute()
         return {"message": "Inquiry submitted successfully", "data": response.data}
@@ -171,8 +233,10 @@ async def create_inquiry(inquiry: Inquiry):
 # --- Admin authentication ---
 
 @app.post("/api/admin/login")
-async def admin_login(login: LoginRequest):
+async def admin_login(login: LoginRequest, request: Request):
     """Verify the admin password and return a session token."""
+    if _rate_limited("admin-login", limit=5, window_seconds=60, request=request):
+        raise HTTPException(status_code=429, detail="Too many login attempts. Please wait a minute and try again.")
     if not ADMIN_PASSWORD:
         raise HTTPException(
             status_code=503,
